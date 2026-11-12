@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react"
+import { Pause, Play } from "iconoir-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { Progress } from "@/components/ui/progress"
@@ -34,6 +35,7 @@ export function ExamScreen({ exam }: { exam: Exam }) {
         index: 0,
         submitted: false,
         elapsedMs: 0,
+        paused: false,
       }
   )
   const [confirmOpen, setConfirmOpen] = useState(false)
@@ -44,9 +46,12 @@ export function ExamScreen({ exam }: { exam: Exam }) {
   const attemptRef = useRef(attempt)
   const elapsedRef = useRef(attempt.elapsedMs)
   const runningSinceRef = useRef<number | null>(null)
+  const pausedRef = useRef(attempt.paused)
+  const tickRef = useRef<() => void>(() => {})
 
   useEffect(() => {
     attemptRef.current = attempt
+    pausedRef.current = attempt.paused
   }, [attempt])
 
   useEffect(() => {
@@ -87,7 +92,9 @@ export function ExamScreen({ exam }: { exam: Exam }) {
     if (attemptRef.current.submitted) return
 
     const screenIsActive = () =>
-      document.visibilityState === "visible" && document.hasFocus()
+      !pausedRef.current &&
+      document.visibilityState === "visible" &&
+      document.hasFocus()
 
     const persist = (elapsedMs: number) => {
       elapsedRef.current = elapsedMs
@@ -95,6 +102,7 @@ export function ExamScreen({ exam }: { exam: Exam }) {
     }
 
     const tick = () => {
+      tickRef.current = tick
       if (attemptRef.current.submitted) return
       const now = Date.now()
       const active = screenIsActive()
@@ -156,6 +164,21 @@ export function ExamScreen({ exam }: { exam: Exam }) {
     }
   }, [exam.id])
 
+  function togglePause() {
+    const nextPaused = !pausedRef.current
+    pausedRef.current = nextPaused
+    attemptRef.current = { ...attemptRef.current, paused: nextPaused }
+    tickRef.current()
+    const next = {
+      ...attempt,
+      paused: nextPaused,
+      elapsedMs: elapsedRef.current,
+    }
+    setAttempt(next)
+    saveAttempt(exam.id, next)
+    if (nextPaused) setClockRunning(false)
+  }
+
   function requestFinish() {
     if (blank > 0) {
       setConfirmOpen(true)
@@ -203,6 +226,15 @@ export function ExamScreen({ exam }: { exam: Exam }) {
             <p className="text-xs text-muted-foreground">
               {clockRunning ? "contando" : "pausado"}
             </p>
+            <Button
+              variant="outline"
+              size="sm"
+              className="mt-2"
+              onClick={togglePause}
+            >
+              {attempt.paused ? <Play /> : <Pause />}
+              {attempt.paused ? "Retomar" : "Pausar"}
+            </Button>
           </div>
         </div>
         <Progress value={(answered / exam.questions.length) * 100} />
@@ -220,6 +252,7 @@ export function ExamScreen({ exam }: { exam: Exam }) {
               <button
                 key={item.number}
                 type="button"
+                disabled={attempt.paused}
                 onClick={() => goTo(index)}
                 className={cn(
                   "h-8 rounded-md border text-xs",
@@ -252,8 +285,9 @@ export function ExamScreen({ exam }: { exam: Exam }) {
           ) : null}
           <RadioGroup
             value={selected ?? ""}
+            disabled={attempt.paused}
             onValueChange={(value) => {
-              if (!isChoice(value)) return
+              if (attempt.paused || !isChoice(value)) return
               update({
                 ...attempt,
                 answers: {
@@ -268,11 +302,17 @@ export function ExamScreen({ exam }: { exam: Exam }) {
               <label
                 key={option.id}
                 className={cn(
-                  "flex cursor-pointer items-start gap-3 rounded-lg border p-3 text-base leading-relaxed",
+                  "flex items-start gap-3 rounded-lg border p-3 text-base leading-relaxed",
+                  !attempt.paused && "cursor-pointer",
+                  attempt.paused && "cursor-default opacity-70",
                   selected === option.id && "border-primary bg-primary/5"
                 )}
               >
-                <RadioGroupItem value={option.id} className="mt-1" />
+                <RadioGroupItem
+                  value={option.id}
+                  className="mt-1"
+                  disabled={attempt.paused}
+                />
                 <span>
                   <span className="font-medium">{option.id}) </span>
                   <span className="whitespace-pre-line">{option.text}</span>
@@ -286,7 +326,7 @@ export function ExamScreen({ exam }: { exam: Exam }) {
       <div className="flex justify-between gap-3">
         <Button
           variant="outline"
-          disabled={attempt.index === 0}
+          disabled={attempt.paused || attempt.index === 0}
           onClick={() => goTo(attempt.index - 1)}
         >
           Anterior
@@ -294,7 +334,12 @@ export function ExamScreen({ exam }: { exam: Exam }) {
         {attempt.index === exam.questions.length - 1 ? (
           <Button onClick={requestFinish}>Finalizar prova</Button>
         ) : (
-          <Button onClick={() => goTo(attempt.index + 1)}>Próxima</Button>
+          <Button
+            disabled={attempt.paused}
+            onClick={() => goTo(attempt.index + 1)}
+          >
+            Próxima
+          </Button>
         )}
       </div>
 

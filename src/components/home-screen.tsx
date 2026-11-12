@@ -40,7 +40,8 @@ export function HomeScreen() {
         <p className="max-w-xl text-base leading-relaxed text-muted-foreground">
           Escolha um dos 6 simulados, responda as 80 questões e veja o
           percentual no final. A aprovação é com 70%, ou seja, 56 acertos. Cada
-          prova dura 2h30, e o relógio pausa quando você sai da tela.
+          prova dura 2h30. Dá para pausar no botão, e o relógio também para
+          quando você sai da tela.
         </p>
       </header>
 
@@ -73,6 +74,7 @@ export function HomeScreen() {
                   {attempt && !result ? (
                     <span className="font-mono tabular-nums">
                       {formatClock(remainingMs(attempt.elapsedMs))}
+                      {attempt.paused ? " · pausado" : ""}
                     </span>
                   ) : null}
                 </div>
@@ -88,7 +90,11 @@ export function HomeScreen() {
                   </Button>
                 ) : (
                   <Button onClick={() => openExam(exam.id)}>
-                    {answered > 0 ? "Continuar" : "Iniciar"}
+                    {attempt?.paused
+                      ? "Retomar"
+                      : answered > 0
+                        ? "Continuar"
+                        : "Iniciar"}
                   </Button>
                 )}
                 {attempt ? (

@@ -22,6 +22,7 @@ export type Attempt = {
   index: number
   submitted: boolean
   elapsedMs: number
+  paused: boolean
 }
 
 export const PASS_PERCENT = 70
@@ -59,6 +60,7 @@ export function loadAttempt(examId: number): Attempt | null {
       index: typeof data.index === "number" ? data.index : 0,
       submitted: Boolean(data.submitted),
       elapsedMs,
+      paused: data.paused === true,
     }
   } catch {
     return null
