@@ -21,9 +21,11 @@ export type Attempt = {
   answers: Record<string, Choice>
   index: number
   submitted: boolean
+  elapsedMs: number
 }
 
 export const PASS_PERCENT = 70
+export const EXAM_DURATION_MS = 2.5 * 60 * 60 * 1000
 export const exams = examsData as Exam[]
 
 const CHOICES: Choice[] = ["A", "B", "C", "D"]
@@ -48,10 +50,15 @@ export function loadAttempt(examId: number): Attempt | null {
     for (const [key, value] of Object.entries(data.answers)) {
       if (typeof value === "string" && isChoice(value)) answers[key] = value
     }
+    const elapsedMs =
+      typeof data.elapsedMs === "number" && data.elapsedMs > 0
+        ? Math.min(data.elapsedMs, EXAM_DURATION_MS)
+        : 0
     return {
       answers,
       index: typeof data.index === "number" ? data.index : 0,
       submitted: Boolean(data.submitted),
+      elapsedMs,
     }
   } catch {
     return null
@@ -91,4 +98,18 @@ export function formatPercent(percent: number) {
 
 export function figureUrl(name: string) {
   return `${import.meta.env.BASE_URL}figures/${name}`
+}
+
+export function formatClock(ms: number) {
+  const totalSeconds = Math.max(0, Math.ceil(ms / 1000))
+  const hours = Math.floor(totalSeconds / 3600)
+  const minutes = Math.floor((totalSeconds % 3600) / 60)
+  const seconds = totalSeconds % 60
+  return [hours, minutes, seconds]
+    .map((part) => String(part).padStart(2, "0"))
+    .join(":")
+}
+
+export function remainingMs(elapsedMs: number) {
+  return Math.max(0, EXAM_DURATION_MS - elapsedMs)
 }

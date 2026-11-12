@@ -15,9 +15,12 @@ import {
 } from "@/components/ui/alert-dialog"
 import { cn } from "@/lib/utils"
 import {
+  EXAM_DURATION_MS,
   figureUrl,
+  formatClock,
   isChoice,
   loadAttempt,
+  remainingMs,
   saveAttempt,
   type Attempt,
   type Exam,
@@ -30,11 +33,21 @@ export function ExamScreen({ exam }: { exam: Exam }) {
         answers: {},
         index: 0,
         submitted: false,
+        elapsedMs: 0,
       }
   )
   const [confirmOpen, setConfirmOpen] = useState(false)
+  const [clockMs, setClockMs] = useState(() => remainingMs(attempt.elapsedMs))
+  const [clockRunning, setClockRunning] = useState(false)
   const cardRef = useRef<HTMLDivElement>(null)
   const skipScroll = useRef(true)
+  const attemptRef = useRef(attempt)
+  const elapsedRef = useRef(attempt.elapsedMs)
+  const runningSinceRef = useRef<number | null>(null)
+
+  useEffect(() => {
+    attemptRef.current = attempt
+  }, [attempt])
 
   useEffect(() => {
     if (attempt.submitted) {
@@ -56,8 +69,9 @@ export function ExamScreen({ exam }: { exam: Exam }) {
   const blank = exam.questions.length - answered
 
   function update(next: Attempt) {
-    setAttempt(next)
-    saveAttempt(exam.id, next)
+    const withTime = { ...next, elapsedMs: elapsedRef.current }
+    setAttempt(withTime)
+    saveAttempt(exam.id, withTime)
   }
 
   function goTo(index: number) {
@@ -65,9 +79,82 @@ export function ExamScreen({ exam }: { exam: Exam }) {
   }
 
   function finish() {
+    runningSinceRef.current = null
     update({ ...attempt, submitted: true })
-    window.location.hash = `/${exam.id}/resultado`
   }
+
+  useEffect(() => {
+    if (attemptRef.current.submitted) return
+
+    const screenIsActive = () =>
+      document.visibilityState === "visible" && document.hasFocus()
+
+    const persist = (elapsedMs: number) => {
+      elapsedRef.current = elapsedMs
+      saveAttempt(exam.id, { ...attemptRef.current, elapsedMs })
+    }
+
+    const tick = () => {
+      if (attemptRef.current.submitted) return
+      const now = Date.now()
+      const active = screenIsActive()
+      if (active && runningSinceRef.current == null) {
+        runningSinceRef.current = now
+      }
+      if (!active && runningSinceRef.current != null) {
+        const elapsed = Math.min(
+          EXAM_DURATION_MS,
+          elapsedRef.current + now - runningSinceRef.current
+        )
+        runningSinceRef.current = null
+        persist(elapsed)
+      }
+      if (active && runningSinceRef.current != null) {
+        const elapsed = Math.min(
+          EXAM_DURATION_MS,
+          elapsedRef.current + now - runningSinceRef.current
+        )
+        elapsedRef.current = elapsed
+        runningSinceRef.current = now
+        persist(elapsed)
+      }
+
+      const remaining = Math.max(0, EXAM_DURATION_MS - elapsedRef.current)
+      setClockMs(remaining)
+      setClockRunning(active && remaining > 0)
+      if (remaining <= 0) {
+        runningSinceRef.current = null
+        setAttempt((current) =>
+          current.submitted
+            ? current
+            : { ...current, elapsedMs: EXAM_DURATION_MS, submitted: true }
+        )
+      }
+    }
+
+    document.addEventListener("visibilitychange", tick)
+    window.addEventListener("focus", tick)
+    window.addEventListener("blur", tick)
+    window.addEventListener("pagehide", tick)
+    const timer = window.setInterval(tick, 1000)
+    tick()
+
+    return () => {
+      document.removeEventListener("visibilitychange", tick)
+      window.removeEventListener("focus", tick)
+      window.removeEventListener("blur", tick)
+      window.removeEventListener("pagehide", tick)
+      window.clearInterval(timer)
+      if (runningSinceRef.current != null && !attemptRef.current.submitted) {
+        const elapsed = Math.min(
+          EXAM_DURATION_MS,
+          elapsedRef.current + Date.now() - runningSinceRef.current
+        )
+        runningSinceRef.current = null
+        persist(elapsed)
+      }
+    }
+  }, [exam.id])
 
   function requestFinish() {
     if (blank > 0) {
@@ -79,7 +166,7 @@ export function ExamScreen({ exam }: { exam: Exam }) {
 
   return (
     <main className="mx-auto flex w-full max-w-3xl flex-col gap-6 px-4 py-6">
-      <header className="flex flex-col gap-3">
+      <header className="sticky top-0 z-10 -mx-4 flex flex-col gap-3 bg-background/95 px-4 py-3 backdrop-blur">
         <div className="flex items-center justify-between gap-3">
           <button
             type="button"
@@ -94,12 +181,29 @@ export function ExamScreen({ exam }: { exam: Exam }) {
             Finalizar prova
           </Button>
         </div>
-        <div className="flex flex-col gap-1">
-          <h1 className="text-xl font-semibold tracking-tight">{exam.title}</h1>
-          <p className="text-sm text-muted-foreground">
-            Questão {question.number} de {exam.questions.length} · {answered}{" "}
-            respondidas
-          </p>
+        <div className="flex items-end justify-between gap-4">
+          <div className="flex flex-col gap-1">
+            <h1 className="text-xl font-semibold tracking-tight">
+              {exam.title}
+            </h1>
+            <p className="text-sm text-muted-foreground">
+              Questão {question.number} de {exam.questions.length} · {answered}{" "}
+              respondidas
+            </p>
+          </div>
+          <div className="text-right">
+            <p
+              className={cn(
+                "font-mono text-2xl font-medium tabular-nums",
+                clockMs <= 10 * 60 * 1000 && "text-destructive"
+              )}
+            >
+              {formatClock(clockMs)}
+            </p>
+            <p className="text-xs text-muted-foreground">
+              {clockRunning ? "contando" : "pausado"}
+            </p>
+          </div>
         </div>
         <Progress value={(answered / exam.questions.length) * 100} />
       </header>

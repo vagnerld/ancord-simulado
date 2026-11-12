@@ -8,10 +8,13 @@ import {
   CardTitle,
 } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
+import { Progress } from "@/components/ui/progress"
 import {
   exams,
+  formatClock,
   formatPercent,
   loadAttempt,
+  remainingMs,
   scoreExam,
   clearAttempt,
 } from "@/lib/exam"
@@ -36,7 +39,8 @@ export function HomeScreen() {
         </h1>
         <p className="max-w-xl text-base leading-relaxed text-muted-foreground">
           Escolha um dos 6 simulados, responda as 80 questões e veja o
-          percentual no final. A aprovação é com 70%, ou seja, 56 acertos.
+          percentual no final. A aprovação é com 70%, ou seja, 56 acertos. Cada
+          prova dura 2h30, e o relógio pausa quando você sai da tela.
         </p>
       </header>
 
@@ -55,21 +59,27 @@ export function HomeScreen() {
                 <CardTitle>{exam.title}</CardTitle>
                 <CardDescription>80 questões</CardDescription>
               </CardHeader>
-              <CardContent className="flex flex-col gap-2">
+              <CardContent className="flex flex-col gap-3">
                 {result ? (
                   <Badge variant={result.passed ? "secondary" : "destructive"}>
                     {result.passed ? "Aprovado" : "Reprovado"} ·{" "}
                     {formatPercent(result.percent)}
                   </Badge>
-                ) : answered > 0 ? (
-                  <p className="text-sm text-muted-foreground">
-                    {answered} de 80 respondidas
-                  </p>
-                ) : (
-                  <p className="text-sm text-muted-foreground">
-                    Ainda não iniciado
-                  </p>
-                )}
+                ) : null}
+                <div className="flex items-center justify-between gap-3 text-sm text-muted-foreground">
+                  <span>
+                    {answered} de {exam.questions.length}
+                  </span>
+                  {attempt && !result ? (
+                    <span className="font-mono tabular-nums">
+                      {formatClock(remainingMs(attempt.elapsedMs))}
+                    </span>
+                  ) : null}
+                </div>
+                <Progress
+                  value={(answered / exam.questions.length) * 100}
+                  className="h-2"
+                />
               </CardContent>
               <CardFooter className="gap-2">
                 {result ? (
